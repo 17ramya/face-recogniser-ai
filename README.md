@@ -294,37 +294,6 @@ otherwise. CORS is open, so the page may be served from any port.
 | `/api/reload` | POST | - | re-read the trained model from disk |
 | `/name?name=<key>` | GET | - | one person - kept for the old `src/server.js` |
 
-A successful `POST /api/storeimage`:
-
-```json
-{
-  "recognized": true,
-  "faces": 1,
-  "detection": "haar",
-  "threshold": 70.0,
-  "closest_distance": 18.42,
-  "distance": 18.42,
-  "match_key": "ramya_s",
-  "person": {
-    "key": "ramya_s",
-    "registered": true,
-    "name": "Ramya S",
-    "age": 21,
-    "department": "Computer Technology",
-    "distance": 18.42
-  },
-  "results": [
-    { "box": [120, 88, 140, 140], "recognized": true, "person": "ramya_s", "distance": 18.42 }
-  ],
-  "message": "Recognised Ramya S out of 2 enrolled people (distance 18.42).",
-  "stored": "C:\\...\\backend\\uploads\\last_capture.png"
-}
-```
-
-`recognized` is `false` when nobody matched, when no face was found, or when no
-model has been trained; `person` is still filled in and `message` says which of
-those happened. `detection` is `haar`, `full-image` or `none`.
-
 Errors are always JSON, never an HTML page:
 
 | Status | When |
