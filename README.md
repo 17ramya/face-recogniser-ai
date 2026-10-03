@@ -174,6 +174,11 @@ python app.py            # API on http://127.0.0.1:3001
 npm start                # app on http://localhost:3000
 ```
 
+## Live Demo Link
+```bash
+https://face-recogniser-ai.vercel.app/
+```
+
 ### The two ports - do not mix them up
 
 | Address | What answers there | What you see |
