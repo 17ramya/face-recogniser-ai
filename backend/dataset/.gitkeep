@@ -1,0 +1,6 @@
+# Training images live here, one folder per person:
+#
+#   backend/dataset/<person_key>/*.jpg
+#
+# The folder name is the key used in backend/people.json. See README.md
+# ("Enrolling faces") for three ways to fill this folder.

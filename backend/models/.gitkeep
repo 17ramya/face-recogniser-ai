@@ -1,0 +1,6 @@
+# train.py writes the trained artifacts here:
+#
+#   backend/models/lbph_model.yml   the LBPH histograms (OpenCV YAML)
+#   backend/models/labels.json      label id -> person key
+#
+# Both are generated files and are git-ignored.

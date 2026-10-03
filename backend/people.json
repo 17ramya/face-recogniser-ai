@@ -1,0 +1,8 @@
+{
+  "_comment": "People metadata. Each key must match a folder name under backend/dataset/. Add entries with capture.py.",
+  "ramya_s": {
+    "name": "Ramya S",
+    "department": "Computer Technology",
+    "age": "21"
+  }
+}

@@ -1,0 +1,54 @@
+
+@media screen and (max-width: 768px) {
+  .webcam-personlist-container {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .personlist-container {
+    margin-top: 20px;
+  }
+}
+
+@media screen and (min-width: 769px) {
+  .webcam-personlist-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .personlist-container {
+    margin-left: 20px;
+  }
+}
+
+.webcam-panel {
+  flex: 1 1 420px;
+  max-width: 520px;
+}
+
+.webcam-frame {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  border-radius: 0.5rem;
+  background: #111827;
+}
+
+.personlist-container {
+  flex: 1 1 320px;
+}
+
+.app-header .badge {
+  font-weight: 500;
+}
+
+code {
+  word-break: break-all;
+}
+
+
+
+
+
+

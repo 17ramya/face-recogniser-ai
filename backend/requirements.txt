@@ -1,0 +1,13 @@
+# Runtime dependencies of the face-recognition API (backend/app.py).
+#
+#   python -m pip install -r requirements.txt
+#
+# opencv-contrib-python (not plain opencv-python) is required because the
+# LBPH recognizer lives in the `cv2.face` contrib module.
+Flask==3.0.3
+flask-cors==4.0.1
+numpy>=1.24,<3
+opencv-contrib-python==4.10.0.84
+
+# Development / verification only (backend/test_app.py).
+pytest==8.3.3
