@@ -133,7 +133,6 @@ Nothing else is installed by hand: `Flask`, `flask-cors`,
 From the project folder in PowerShell:
 
 ```powershell
-cd "C:\Users\RAMYA S\OneDrive\Documents\github\face-recogniser-main"
 
 # 1. front-end dependencies (once)
 npm install
@@ -190,55 +189,6 @@ refuses to start if it is taken, and the API answers browsers with a page that
 says where the app is. If you ever end up in that state anyway, close the dev
 server and run `.\start-frontend.ps1` again.
 
-## Enrolling faces
-
-The model learns from folders under `backend/dataset/`. There are three ways to
-fill them; pick whichever suits the photos you already have.
-
-**1. Record from the webcam** (30 frames by default):
-
-```powershell
-cd backend
-.\.venv\Scripts\python.exe capture.py --name "Ramya S" --age 21 --department "Computer Technology"
-```
-
-A window opens: `SPACE` pauses or resumes recording, `Q` quits. Frames are saved
-only while a face is visible. Move your head slightly between frames - twenty
-varied photos beat a hundred identical ones.
-
-**2. Import photographs you already have:**
-
-```powershell
-cd backend
-.\.venv\Scripts\python.exe capture.py --name "Ramya S" --age 21 --department "Computer Technology" --images "C:\Users\Ramya\Pictures\me"
-```
-
-Every readable picture in that folder is copied into the dataset **exactly as it
-is** - not cropped. `train.py` then runs the same detect/crop/resize/equalise
-pipeline that recognition runs, which is what makes the photo you enrolled come
-back at distance ~0. Cropping at enrolment instead would have `train.py` detect a
-face *inside* the crop and crop it a second time, comparing the person against a
-different region of their own face.
-
-**3. Copy files in yourself.** Create `backend/dataset/<person_key>/` and drop
-`*.jpg`, `*.png` or `*.bmp` files in it, then add a matching entry to
-`backend/people.json`:
-
-```json
-{
-  "ramya_s": {
-    "name": "Ramya S",
-    "age": 21,
-    "department": "Computer Technology"
-  }
-}
-```
-
-The key (`ramya_s`) is what `capture.py` produces from the name: lower case,
-spaces turned into underscores (see `people.normalise_key`). Lookups are
-case-insensitive, and `-`/`_`/spaces are treated as the same character, so
-`Ramya S`, `ramya_s` and `ramya-s` all match. If a folder has no entry, the
-folder name is shown as the name and age/department appear as `-`.
 
 ## Training
 
@@ -246,22 +196,6 @@ folder name is shown as the name and age/department appear as `-`.
 cd backend
 .\.venv\Scripts\python.exe train.py --evaluate
 ```
-
-```
-[face] dataset : 2 people, 24 images in ...\backend\dataset
-[face]   - ramya_s: 12 image(s)
-[face]   - ravi_k: 12 image(s)
-[face] trained  : 2 people on 24 images (haar 18, whole-image 6)
-[face] wrote    : ...\backend\models\lbph_model.yml
-[face] wrote    : ...\backend\models\labels.json
-[face] self-test: 100.0% of 24 training images matched (mean distance 0.41)
-[face] done    : the API reloads this model automatically.
-```
-
-* `--dataset DIR`, `--models DIR`, `--threshold N` override the defaults.
-* `--evaluate` reports how well the *training* photos match back. It is a
-  sanity check, not a test score: LBPH is memorising those images.
-* `--json` prints the same report as JSON, for scripting.
 
 **You do not have to restart the API.** Every request checks the model's
 timestamp, and `POST /api/reload` forces a re-read immediately.
