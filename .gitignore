@@ -41,3 +41,6 @@ backend/uploads/
 # Local configuration
 .env
 .env.local
+
+# Vercel CLI: project link created by `vercel link` / `vercel dev`
+.vercel

@@ -1,18 +1,31 @@
 /**
  * The single place that knows where the face-recognition API lives.
  *
- * Point the app at another machine by creating a `.env` file in the project
- * root (Create React App reads it at build/start time):
+ * The default is *this* origin, i.e. relative `/api/...` requests, and that is
+ * what both setups need:
+ *
+ *   - `npm start` - the dev server forwards `/api/*` to the Flask server on
+ *     port 3001 thanks to the "proxy" entry in `package.json`.
+ *   - Vercel - `vercel.json` rewrites `/api/*` to the internal `backend`
+ *     service of the same project, so the deployed site needs no hostname, no
+ *     CORS and no service binding (the bundle is static and could not read one
+ *     anyway).
+ *
+ * Set `REACT_APP_API_BASE_URL` in a `.env` file in the project root (Create
+ * React App reads it at build/start time) only when the API lives on another
+ * machine:
  *
  *     REACT_APP_API_BASE_URL=http://192.168.1.20:3001
  *
- * The default matches `backend/config.py` (FACE_API_HOST / FACE_API_PORT).
+ * The ports it must agree with are `backend/config.py` (FACE_API_HOST /
+ * FACE_API_PORT).
  */
 import axios from 'axios';
 
-export const API_BASE_URL = (
-  process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001'
-).replace(/\/+$/, '');
+export const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/+$/, '');
+
+/** An empty base means "the API is on this origin" - read better in messages. */
+const WHERE = API_BASE_URL || 'this site';
 
 export const ENDPOINTS = {
   health: `${API_BASE_URL}/api/health`,
@@ -32,19 +45,23 @@ export function describeError(error) {
     // the "Two ports" section of README.md.
     if (typeof data === 'string' && /^\s*<(?:!doctype|html)/i.test(data)) {
       return (
-        `${API_BASE_URL} answered with a web page instead of the API. ` +
-        'Check the ports: the app runs on 3000 and the API on 3001 ' +
-        '(REACT_APP_API_BASE_URL).'
+        `${WHERE} answered with a web page instead of the API, so the call reached ` +
+        'the front end rather than Flask. Check REACT_APP_API_BASE_URL, and on ' +
+        'Vercel that the /api/* rewrite in vercel.json still points at the ' +
+        'backend service.'
       );
     }
     const message = data && typeof data === 'object' ? data.error || data.message : data;
     return message || `The API answered with status ${error.response.status}.`;
   }
   if (error && error.request) {
-    return (
-      `Could not reach the face API at ${API_BASE_URL}. ` +
-      'Start it with "python app.py" inside the backend folder.'
-    );
+    return API_BASE_URL
+      ? `Could not reach the face API at ${API_BASE_URL}. ` +
+          'Check the backend window: start it with "python app.py" inside the ' +
+          'backend folder.'
+      : "Could not reach the face API through this site's /api/ routes. " +
+          'Start the backend (.\\start-all.ps1), or set REACT_APP_API_BASE_URL ' +
+          'to the address of the machine running it.';
   }
   return (error && error.message) || 'Something unexpected went wrong.';
 }

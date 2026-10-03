@@ -181,13 +181,16 @@ npm start                # app on http://localhost:3000
 | <http://localhost:3000> | the React app - **this is the website** | the Face Recogniser page, with the webcam preview |
 | <http://127.0.0.1:3001> | the Flask API | JSON - or, in a browser, a short page saying "you are looking at the API" |
 
-`src/api.js` points the app at port 3001, so the two must never swap places. If
-Create React App finds 3000 occupied it moves to the next free port by itself -
-often 3001, straight onto the API - and then the app is talking to itself and
-the API's port serves a web page. `start-frontend.ps1` pins the port to 3000 and
-refuses to start if it is taken, and the API answers browsers with a page that
-says where the app is. If you ever end up in that state anyway, close the dev
-server and run `.\start-frontend.ps1` again.
+The app asks for `/api/...` on its own origin, and while you run `npm start`
+the dev server forwards those calls to port 3001 (the `proxy` entry in
+`package.json`); on Vercel the same relative path is routed by `vercel.json`
+instead - see *Deploying on Vercel*. Either way the two ports must never swap
+places. If Create React App finds 3000 occupied it moves to the next free port
+by itself - often 3001, straight onto the API - and then the app is talking to
+itself and the API's port serves a web page. `start-frontend.ps1` pins the port
+to 3000 and refuses to start if it is taken, and the API answers browsers with a
+page that says where the app is. If you ever end up in that state anyway, close
+the dev server and run `.\start-frontend.ps1` again.
 
 
 ## Training
@@ -207,7 +210,7 @@ timestamp, and `POST /api/reload` forces a re-read immediately.
 | API only | `cd backend` then `.\.venv\Scripts\python.exe app.py` | <http://127.0.0.1:3001> |
 | App only | `npm start` | <http://localhost:3000> |
 | Both | `.\start-all.ps1` | both of the above |
-| Production build | `npm run build` then `npx serve -s build` | static files in `build/` |
+| Production build | `npm run build` then `npx serve -s build` | static files in `build/` - `serve` has no proxy, so set `REACT_APP_API_BASE_URL` first |
 | Backend checks | `cd backend`; `.\.venv\Scripts\python.exe -m pytest test_app.py -q` | - |
 
 If `.\.venv\Scripts\python.exe` feels long, activate the environment once:
@@ -215,8 +218,11 @@ If `.\.venv\Scripts\python.exe` feels long, activate the environment once:
 
 ## API
 
-Base URL is `http://localhost:3001` unless `FACE_API_HOST` / `FACE_API_PORT` say
-otherwise. CORS is open, so the page may be served from any port.
+The API listens on `http://127.0.0.1:3001` unless `FACE_API_HOST` /
+`FACE_API_PORT` say otherwise. CORS is open, so the page may be served from any
+port. The app calls the **relative** path `/api/...` and reaches Flask through
+the dev-server proxy (`npm start`) or the Vercel rewrite (deployed); set
+`REACT_APP_API_BASE_URL` only when the API is on another machine.
 
 | Route | Method | Body | Returns |
 | --- | --- | --- | --- |
@@ -277,7 +283,7 @@ The front end reads one variable from `.env` (copy `.env.example`):
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `REACT_APP_API_BASE_URL` | `http://localhost:3001` | where the API is |
+| `REACT_APP_API_BASE_URL` | *(unset - same origin)* | where the API is; set it only for a separate host |
 
 Example - a second camera on another port, with a stricter threshold:
 
@@ -366,19 +372,102 @@ With a two-person model the second call answers, for example:
  "stored": "...\\backend\\uploads\\last_capture.jpg"}
 ```
 
+## Deploying on Vercel
+
+`vercel.json` in the project root deploys this repository as **one Vercel
+project made of two services** behind a single domain:
+
+| Service | `root` | What it is | Reachable from the internet? |
+| --- | --- | --- | --- |
+| `app` | `.` | Create React App, built to `build/` (`npm run build`) | yes - everything except `/api/*` |
+| `backend` | `backend` | the Flask API - `backend/app.py`, the module-level `app` object | **no, internal only**, via `/api/*` |
+
+A service is private unless a top-level rewrite points at it, so these two
+rewrites are the whole public surface:
+
+```json
+"rewrites": [
+  { "source": "/api/(.*)", "destination": { "service": "backend" } },
+  { "source": "/(.*)",     "destination": { "service": "app" } }
+]
+```
+
+Most specific path first, catch-all last. The API's routes are already
+`/api/...` (`/api/health`, `/api/people`, `/api/dataset`, `/api/reload`,
+`/api/storeimage`), and the rewrite forwards the request unchanged, so no
+prefix has to be added or stripped anywhere. `GET /name` and `/people` (aliases
+kept for the old demo components) are **not** public; add a rewrite for them if
+you ever want them.
+
+**No bindings, on purpose.** A binding injects another service's internal URL
+into a *function* runtime - and it does not exist at build time. The front end is
+a static bundle that runs in the browser, so it can neither receive a binding
+nor read one; the `/api/*` rewrite is what connects the two services, and
+`src/api.js` therefore uses a relative URL (no hostname to configure). If you
+later add a server-side service that calls the API, declare the binding on the
+*calling* service and read the injected variable in that code:
+
+```json
+"services": {
+  "worker": {
+    "root": "worker",
+    "bindings": [
+      { "type": "service", "service": "backend", "format": "url", "env": "FACE_API_URL" }
+    ]
+  }
+}
+```
+
+```js
+await fetch(new URL('api/storeimage', process.env.FACE_API_URL));
+```
+
+Run both services locally, rewrites included, with `vercel dev`; the manual
+`npm start` + `python app.py` pair still works.
+
+### What a deploy will and will not do
+
+* **The trained model is not in git.** `.gitignore` excludes `backend/models/*`
+  and `backend/dataset/*`, so a fresh clone - and therefore a fresh deploy - has
+  no `lbph_model.yml`. `/api/health` reports `model_ready: false` and every
+  capture answers *"No model is trained yet"*. Commit the artifacts you want to
+  serve (`git add -f backend/models/lbph_model.yml backend/models/labels.json`,
+  and `backend/dataset/` too if you want them) or fetch them from storage during
+  the build. Never `git add -f` other people's photos without asking them.
+* **The filesystem is read-only except `/tmp`.** A serverless instance cannot
+  write `backend/uploads/`, `backend/people.json` or `backend/models/`. The API
+  tolerates that (`_remember()` logs the failure and answers anyway), but
+  `capture.py`, `train.py` and hand-edits of `people.json` only work on your own
+  machine. Set `FACE_UPLOADS_DIR=/tmp/uploads` in the project's environment
+  variables if you want the debug frame kept - and remember any write is per
+  instance and disappears with it.
+* **Use `opencv-contrib-python-headless` in the cloud.** The plain contrib
+  wheel links `libGL.so.1`, which the Vercel Python runtime does not ship, so the
+  import fails and every request returns 500. `cv2.face` (the LBPH recognizer) is
+  in both builds, so swapping the line in `backend/requirements.txt` is enough.
+  Keep a local venv on the plain wheel if you prefer - just install the headless
+  one cleanly (`pip uninstall opencv-contrib-python` first) rather than on top.
+  Vercel chooses the Python version (3.13 and 3.14 are available); if a
+  dependency ever has no wheel for the one it picks, pin it with a
+  one-line `backend/.python-version`.
+* **The camera needs HTTPS**, which Vercel gives the deployed site for free -
+  that is the reason a deployed demo can capture at all. Recognition quality is
+  unchanged by hosting: see *Getting good results*.
+
 ## Troubleshooting
 
 | Problem | Cause and fix |
 | --- | --- |
 | The page shows **"API offline"** | The API is not running. Start it (`.\start-backend.ps1`) and reload. Hover the badge for the real error. |
 | Opening `localhost:3001` shows only JSON, or a page saying *"you are looking at the API"* | That is the API - it is supposed to answer like that. The website is on <http://localhost:3000>. If nothing answers there, run `.\start-frontend.ps1`. |
-| The app loads but every capture fails with *"answered with a web page instead of the API"* | The dev server has taken port 3001, so the app is calling itself. Close that terminal and run `.\start-frontend.ps1` - it now pins the port to 3000 and tells you if something else holds it. |
-| **"No model is trained yet"** | `backend/models/lbph_model.yml` is missing. Add photos and run `python train.py`. |
+| The app loads but every capture fails with *"answered with a web page instead of the API"* | The dev server has taken port 3001, so the app is calling itself. Close that terminal and run `.\start-frontend.ps1` - it now pins the port to 3000 and tells you if something else holds it. On Vercel the same message means the request never reached the backend service: check the `/api/*` rewrite in `vercel.json`. |
+| **"No model is trained yet"** | `backend/models/lbph_model.yml` is missing. Add photos and run `python train.py`. On Vercel it is missing because `backend/models/*` is git-ignored - see *Deploying on Vercel*. |
 | `Failed to compile. [eslint] ...` | `npm run build` treats warnings as errors only when `CI=true`; fix the reported file or build without `CI`. |
 | `ModuleNotFoundError: No module named 'cv2'` | Wrong interpreter. Use `backend\.venv\Scripts\python.exe`, or activate the venv first. |
 | `module 'cv2' has no attribute 'face'` | `opencv-python` is installed instead of `opencv-contrib-python`. Re-run `pip install -r requirements.txt`; only the contrib build has `cv2.face`. |
+| Every call to the deployed API returns 500 | Read the function log: `opencv-contrib-python` needs `libGL.so.1`, which Vercel does not provide. Install `opencv-contrib-python-headless` for the deploy (*Deploying on Vercel*). |
 | Nothing happens when I press Capture | The browser blocked the camera. Click the camera icon in the address bar, allow access, then reload. A camera also needs `localhost` or HTTPS. |
-| `Could not reach the face API at http://localhost:3001` | The API died or the port is wrong. Check the backend window; if you move the port, change `FACE_API_PORT` and `REACT_APP_API_BASE_URL` together. |
+| `Could not reach the face API ...` | The API is not answering. Start it (`.\\start-backend.ps1`) and read the backend window. The app asks for `/api/...` on its own origin, so if you move the port change `FACE_API_PORT` and `REACT_APP_API_BASE_URL` together. |
 | `Port 3001 is already in use` | Find the owner with `Get-NetTCPConnection -LocalPort 3001`, or start the API with `FACE_API_PORT=3002`. |
 | Everyone is recognised as the same person | Too few photos, one person dominating the dataset, or the threshold is too loose. Add photos of the others and lower `FACE_MATCH_THRESHOLD`. |
 | Recognition is always "Unknown" | The threshold is too strict for your lighting, or the training photos look nothing like the live camera - a single studio photo of you, or the same photo stored twice under two names, is the usual reason. Enrol a round of frames with `capture.py --name "Your Name" --count 20`, retrain, and see *Getting good results*. |
@@ -404,9 +493,10 @@ With a two-person model the second call answers, for example:
 * **Everything happens locally.** Photos never leave the machine, but the last
   frame is written to `backend/uploads/` and the enrolled photos stay in
   `backend/dataset/` - both git-ignored, both yours to delete.
-* **The Flask server is a development server.** For anything beyond your own
-  machine, put it behind a real WSGI server (waitress, gunicorn) and keep the
-  API bound to `127.0.0.1`.
+* **The Flask server is a development server.** Locally that is fine; if you
+  expose it on purpose, put it behind a real WSGI server (waitress, gunicorn) and
+  keep the API bound to `127.0.0.1`. The Vercel setup in *Deploying on Vercel*
+  runs it as a serverless function instead - no `app.run`, no long-lived process.
 
 ## Legacy files
 
@@ -414,9 +504,12 @@ With a two-person model the second call answers, for example:
 original upload and are **not imported anywhere** - `src/index.js` renders
 `src/App.js` only, so they are not in the bundle. They are kept so nothing that
 was there before is lost. Note that `src/server.js` is a React component despite
-its name, so running it with `node` will not work; the API does still answer the
-two shapes they used (`GET /name` and a JSON `POST /api/storeimage`) so they
-would work if you ever wired them back in.
+its name, so running it with `node` will not work. Both now call the routed
+relative path (`/api/people`, `/api/storeimage`) through `src/api.js`, so they
+would reach the API if you wired them back in; `src/sendrequest.js` still posts
+JSON where the API wants a multipart picture. The backend also still answers
+`GET /name` and `GET /people`, which the Vercel rewrites do **not** expose (only
+`/api/*` is).
 
 ## Credits and licence
 
