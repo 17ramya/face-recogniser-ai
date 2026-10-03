@@ -31,12 +31,19 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Generated artifacts: enrolled faces, the trained model, debug captures
+# Generated artifacts: enrolled faces and debug captures. These stay on your
+# machine - the photos are personal data.
 backend/dataset/*
 !backend/dataset/.gitkeep
+backend/uploads/
+
+# The trained model is tracked on purpose: the Vercel deployment reads it,
+# because the dataset it was trained from is not shipped. Re-run train.py and
+# commit these two files again to change what the deployed site recognises.
 backend/models/*
 !backend/models/.gitkeep
-backend/uploads/
+!backend/models/lbph_model.yml
+!backend/models/labels.json
 
 # Local configuration
 .env
