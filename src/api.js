@@ -35,6 +35,29 @@ export const ENDPOINTS = {
   reload: `${API_BASE_URL}/api/reload`,
 };
 
+/**
+ * Flatten whatever the API - or the platform in front of it - answered with
+ * into one plain string.
+ *
+ * A service that crashes is answered by Vercel itself with
+ * `{"error": {"code": "500", "message": "A server error has occurred"}}`, so
+ * `data.error` is an *object* in the most common failure case. Handing that
+ * object back put it where React expects text and blanked the entire page
+ * (React error #31, "Objects are not valid as a React child") - an expensive
+ * way to learn that the backend is down.
+ */
+function messageFrom(data) {
+  if (data == null) return '';
+  if (typeof data === 'string') return data.trim();
+  if (typeof data !== 'object') return String(data);
+  return (
+    messageFrom(data.message) ||
+    messageFrom(data.error) ||
+    messageFrom(data.code) ||
+    JSON.stringify(data)
+  );
+}
+
 /** Turn an axios error into one sentence a human can act on. */
 export function describeError(error) {
   if (error && error.response) {
@@ -51,8 +74,14 @@ export function describeError(error) {
         'backend service.'
       );
     }
-    const message = data && typeof data === 'object' ? data.error || data.message : data;
-    return message || `The API answered with status ${error.response.status}.`;
+    // `messageFrom` never returns an object, so this is always renderable.
+    const text = messageFrom(data);
+    if (!text) {
+      return `The API answered with status ${error.response.status}.`;
+    }
+    return error.response.status >= 500
+      ? `The API answered with status ${error.response.status}: ${text}`
+      : text;
   }
   if (error && error.request) {
     return API_BASE_URL

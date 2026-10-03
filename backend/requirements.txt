@@ -7,7 +7,12 @@
 Flask==3.0.3
 flask-cors==4.0.1
 numpy>=1.24,<3
-opencv-contrib-python==4.10.0.84
+# Desktop gets the GUI wheel, servers get the headless one. The plain wheel
+# links libGL.so.1, which Vercel's Python runtime does not ship, so on Vercel
+# `import cv2` fails at boot and every request answers HTTP 500. The headless
+# wheel has no GUI and no libGL dependency; cv2.face exists in both.
+opencv-contrib-python==4.10.0.84; sys_platform != "linux"
+opencv-contrib-python-headless==4.10.0.84; sys_platform == "linux"
 
 # Development / verification only (backend/test_app.py).
 pytest==8.3.3
